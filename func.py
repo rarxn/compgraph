@@ -2,6 +2,7 @@ from PIL import Image
 import numpy as np
 
 
+
 def create_image(h, w, color, output_file):
     data = np.zeros((h, w, 3), dtype=np.uint8)
     if color == 'gradient':
@@ -25,12 +26,17 @@ class Img:
         self.w = w
         self.data = np.zeros((h, w, 3), dtype=np.uint8)
         self.backgroundColor = bg_color
+        self.z_buffer = np.zeros((h, w))
 
     def clear(self):
         self.data[:, :] = self.backgroundColor.rgb
 
     def save(self, filename):
         Image.fromarray(self.data, 'RGB').save(filename)
+
+    def save_flipped(self, filename):
+        img = Image.fromarray(self.data, 'RGB')
+        img.transpose(Image.FLIP_TOP_BOTTOM).save(filename)
 
     def show(self):
         Image.fromarray(self.data, 'RGB').show()
@@ -86,7 +92,6 @@ class Img:
             if error > 0.5:
                 y += 1 if y1 > y0 else -1
                 error -= 1.0
-        pass
 
     def draw_star(self, type_lines, color):
         for i in range(13):
@@ -101,75 +106,74 @@ class Point3D:
         self.y = y
         self.z = z
 
+    def get_coordinates(self):
+        return np.array([self.x, self.y, self.z])
+
 
 class Model3D:
     def __init__(self, file_path):
         self.vertices = []
-        self.poly = []
+        self.polygon = []
         with open(file_path, 'r') as f:
             for line in f:
+                if len(line) == 1:
+                    continue
                 line = line.split()
                 if line[0] == 'v':
                     self.vertices.append(Point3D(float(line[1]), float(line[2]), float(line[3])))
                 elif line[0] == 'f':
-                    self.poly.append([int(idx.split('/')[0]) - 1 for idx in line[1:]])
+                    self.polygon.append([int(idx.split('/')[0]) - 1 for idx in line[1:]])
 
     def draw_vertices(self, image, color, k, b):
         for vertex in self.vertices:
-            image.setPixel(k * vertex.x + b, -k * vertex.y + b, color)
+            x, y, _ = k * vertex.get_coordinates() + b
+            image.setPixel(x, y, color)
 
-    def draw_poly(self, image, color, k, b):
-        for p in self.poly:
+    def draw_polygon(self, image, color, k, b):
+        for p in self.polygon:
             for i in range(len(p)):
-                p1 = self.vertices[p[i]]
-                p2 = self.vertices[p[(i + 1) % len(p)]]
-                image.line4((np.round(p1.x * k + b)).astype(int), (np.round(-p1.y * k + b)).astype(int),
-                            (np.round(p2.x * k + b)).astype(int), (np.round(-p2.y * k + b)).astype(int), color)
+                x1, y1, _ = np.round(k * self.vertices[p[i]].get_coordinates() + b).astype(int)
+                x2, y2, _ = np.round(k * self.vertices[p[(i + 1) % len(p)]].get_coordinates() + b).astype(int)
+                image.line4(x1, y1, x2, y2, color)
+
+    def draw_triangle(self, image, k, b, colored):
+        colors = 3 if colored else 1
+        l = [0, 0, 1]
+        for p in self.polygon:
+            color = Color(np.random.randint(1, 256, size=colors))
+            x0, y0, z0 = k * self.vertices[p[0]].get_coordinates() + b
+            x1, y1, z1 = k * self.vertices[p[1]].get_coordinates() + b
+            x2, y2, z2 = k * self.vertices[p[2]].get_coordinates() + b
+            xmin = max(0, min(x0, x1, x2))
+            ymin = max(0, min(y0, y1, y2))
+            xmax = max(0, max(x0, x1, x2))
+            ymax = max(0, max(y0, y1, y2))
+            # task12-14
+            normal = get_normal(self.vertices[p[0]].get_coordinates(), self.vertices[p[1]].get_coordinates(),
+                                self.vertices[p[2]].get_coordinates())
+            cos = np.dot(normal, l) / (np.linalg.norm(normal) * np.linalg.norm(l))
+            color = Color([255 * cos, 0, 0])
+            if cos < 0:  # task12-14
+                for x in range(int(xmin), int(xmax + 1)):
+                    for y in range(int(ymin), int(ymax + 1)):
+                        barycentric = get_barycentric_coordinates(x, y, x0, y0, x1, y1, x2, y2)
+                        if all(b > 0 for b in barycentric):
+                            z = barycentric[0] * z0 + barycentric[1] * z1 + barycentric[2] * z2
+                            if 0 <= x < image.w and 0 <= y < image.h:
+                                if z > image.z_buffer[x, y]:
+                                    image.z_buffer[x, y] = z
+                                    image.setPixel(x, y, color)
 
 
-def task1():
-    create_image(800, 800, 0, 'images/task_1a.jpg')
-    create_image(800, 800, 255, 'images/task_1b.jpg')
-    create_image(800, 800, [255, 0, 0], 'images/task_1c.jpg')
-    create_image(800, 800, 'gradient', 'images/task_1d.jpg')
+def get_barycentric_coordinates(x, y, x0, y0, x1, y1, x2, y2):
+    lambda0 = ((x1 - x2) * (y - y2) - (y1 - y2) * (x - x2)) / \
+              ((x1 - x2) * (y0 - y2) - (y1 - y2) * (x0 - x2))
+    lambda1 = ((x2 - x0) * (y - y0) - (y2 - y0) * (x - x0)) / \
+              ((x2 - x0) * (y1 - y0) - (y2 - y0) * (x1 - x0))
+    lambda2 = ((x0 - x1) * (y - y1) - (y0 - y1) * (x - x1)) / \
+              ((x0 - x1) * (y2 - y1) - (y0 - y1) * (x2 - x1))
+    return lambda0, lambda1, lambda2
 
 
-def task2():
-    clr = Color([128, 0, 0])
-    img = Img(200, 200)
-    img.draw_star(img.line1, clr)
-    img.save('images/task_2a.jpg')
-    img.clear()
-
-    img.draw_star(img.line2, clr)
-    img.save('images/task_2b.jpg')
-    img.clear()
-
-    img.draw_star(img.line3, clr)
-    img.save('images/task_2c.jpg')
-    img.clear()
-
-    img.draw_star(img.line4, clr)
-    img.save('images/task_2d.jpg')
-    img.clear()
-
-
-def task4():
-    img = Img(1000, 1000)
-    mod = Model3D('model_1.obj')
-    mod.draw_vertices(img, Color([255, 255, 255]), 4000, 500)
-    img.save('images/task_4.jpg')
-
-
-def taks6():
-    img = Img(1000, 1000)
-    mod = Model3D('model_1.obj')
-    mod.draw_poly(img, Color([255, 255, 255]), 4000, 500)
-    img.save('images/task_6.jpg')
-
-
-if __name__ == '__main__':
-    task1()
-    task2()
-    task4()
-    taks6()
+def get_normal(p0, p1, p2):
+    return np.cross(p1 - p0, p2 - p0)
