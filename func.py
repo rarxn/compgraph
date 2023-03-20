@@ -1,6 +1,6 @@
 from PIL import Image
 import numpy as np
-
+from tqdm import tqdm
 
 
 def create_image(h, w, color, output_file):
@@ -102,18 +102,21 @@ class Img:
 
 class Point3D:
     def __init__(self, x, y, z):
-        self.x = x
-        self.y = y
-        self.z = z
+        self.coordinates = np.array([x, y, z])
 
     def get_coordinates(self):
-        return np.array([self.x, self.y, self.z])
+        return self.coordinates
+
+    def set_coordinates(self, coords):
+        self.coordinates = coords
 
 
 class Model3D:
     def __init__(self, file_path):
         self.vertices = []
         self.polygon = []
+        self.normal = []
+        self.polygon_normal = []
         with open(file_path, 'r') as f:
             for line in f:
                 if len(line) == 1:
@@ -123,46 +126,70 @@ class Model3D:
                     self.vertices.append(Point3D(float(line[1]), float(line[2]), float(line[3])))
                 elif line[0] == 'f':
                     self.polygon.append([int(idx.split('/')[0]) - 1 for idx in line[1:]])
+                    self.polygon_normal.append([int(idx.split('/')[2]) - 1 for idx in line[1:]])
+                elif line[0] == 'vn':
+                    self.normal.append(Point3D(float(line[1]), float(line[2]), float(line[3])))
 
-    def draw_vertices(self, image, color, k, b):
+    def draw_vertices(self, image, color):
         for vertex in self.vertices:
-            x, y, _ = k * vertex.get_coordinates() + b
+            x, y, _ = vertex.get_coordinates()
             image.setPixel(x, y, color)
 
-    def draw_polygon(self, image, color, k, b):
+    def draw_polygon(self, image, color):
         for p in self.polygon:
             for i in range(len(p)):
-                x1, y1, _ = np.round(k * self.vertices[p[i]].get_coordinates() + b).astype(int)
-                x2, y2, _ = np.round(k * self.vertices[p[(i + 1) % len(p)]].get_coordinates() + b).astype(int)
+                x1, y1, _ = np.round(self.vertices[p[i]].get_coordinates()).astype(int)
+                x2, y2, _ = np.round(self.vertices[p[(i + 1) % len(p)]].get_coordinates()).astype(int)
                 image.line4(x1, y1, x2, y2, color)
 
-    def draw_triangle(self, image, k, b, colored):
-        colors = 3 if colored else 1
+    def draw_triangle(self, image, colored):
+        # colors = 3 if colored else 1
         l = [0, 0, 1]
-        for p in self.polygon:
-            color = Color(np.random.randint(1, 256, size=colors))
-            x0, y0, z0 = k * self.vertices[p[0]].get_coordinates() + b
-            x1, y1, z1 = k * self.vertices[p[1]].get_coordinates() + b
-            x2, y2, z2 = k * self.vertices[p[2]].get_coordinates() + b
+        for p, n in tqdm(zip(self.polygon, self.polygon_normal)):
+            # color = Color(np.random.randint(1, 256, size=colors))
+            x0, y0, z0 = self.vertices[p[0]].get_coordinates()
+            x1, y1, z1 = self.vertices[p[1]].get_coordinates()
+            x2, y2, z2 = self.vertices[p[2]].get_coordinates()
             xmin = max(0, min(x0, x1, x2))
             ymin = max(0, min(y0, y1, y2))
             xmax = max(0, max(x0, x1, x2))
             ymax = max(0, max(y0, y1, y2))
+            # task 18
+            vec_normal = np.array([np.dot(self.normal[idx].get_coordinates(), l) / (
+                        np.linalg.norm(self.normal[idx].get_coordinates()) * np.linalg.norm(l))
+                                   for idx in n])
             # task12-14
-            normal = get_normal(self.vertices[p[0]].get_coordinates(), self.vertices[p[1]].get_coordinates(),
-                                self.vertices[p[2]].get_coordinates())
-            cos = np.dot(normal, l) / (np.linalg.norm(normal) * np.linalg.norm(l))
-            color = Color([255 * cos, 0, 0])
-            if cos < 0:  # task12-14
-                for x in range(int(xmin), int(xmax + 1)):
-                    for y in range(int(ymin), int(ymax + 1)):
-                        barycentric = get_barycentric_coordinates(x, y, x0, y0, x1, y1, x2, y2)
-                        if all(b > 0 for b in barycentric):
-                            z = barycentric[0] * z0 + barycentric[1] * z1 + barycentric[2] * z2
-                            if 0 <= x < image.w and 0 <= y < image.h:
-                                if z > image.z_buffer[x, y]:
-                                    image.z_buffer[x, y] = z
-                                    image.setPixel(x, y, color)
+            # normal = get_normal(self.vertices[p[0]].get_coordinates(), self.vertices[p[1]].get_coordinates(),
+            #                     self.vertices[p[2]].get_coordinates())
+            # cos = np.dot(normal, l) / (np.linalg.norm(normal) * np.linalg.norm(l))
+            # color = Color([255 * cos, 0, 0])
+            # if cos < 0:  # task12-14
+            for x in range(int(xmin), int(xmax + 1)):
+                for y in range(int(ymin), int(ymax + 1)):
+                    barycentric = get_barycentric_coordinates(x, y, x0, y0, x1, y1, x2, y2)
+                    if all(b > 0 for b in barycentric):
+                        z = barycentric[0] * z0 + barycentric[1] * z1 + barycentric[2] * z2
+                        if 0 <= x < image.w and 0 <= y < image.h:
+                            if z > image.z_buffer[x, y]:
+                                color = Color([np.sum(255 * (vec_normal * barycentric)), 0, 0])  # task 18
+                                image.z_buffer[x, y] = z
+                                image.setPixel(x, y, color)
+
+    def screen_vertices(self, k, b):
+        for v in self.vertices:
+            v.set_coordinates(k * v.get_coordinates() + b)
+
+    def projective_vertices(self, rotate=None):
+        R = rotation_matrix(*rotate) if rotate else None
+        t = np.array([0.005, -0.05, 0.9])
+        K = np.array([[-5000, 0, 500],
+                      [0, -5000, 500],
+                      [0, 0, 1]])
+        for v in self.vertices:
+            if R is not None:
+                v.set_coordinates(R @ (K @ (v.get_coordinates() + t)))
+            else:
+                v.set_coordinates(K @ (v.get_coordinates() + t))
 
 
 def get_barycentric_coordinates(x, y, x0, y0, x1, y1, x2, y2):
@@ -177,3 +204,18 @@ def get_barycentric_coordinates(x, y, x0, y0, x1, y1, x2, y2):
 
 def get_normal(p0, p1, p2):
     return np.cross(p1 - p0, p2 - p0)
+
+
+def rotation_matrix(alpha, betta, gamma):
+    r1 = np.array([[1, 0, 0],
+                   [0, np.cos(alpha), np.sin(alpha)],
+                   [0, -np.sin(alpha), np.cos(alpha)]])
+
+    r2 = np.array([[np.cos(betta), 0, np.sin(betta)],
+                   [0, 1, 0],
+                   [-np.sin(betta), 0, np.cos(betta)]])
+
+    r3 = np.array([[np.cos(gamma), np.sin(gamma), 0],
+                   [-np.sin(gamma), np.cos(gamma), 0],
+                   [0, 0, 1]])
+    return r1 @ r2 @ r3

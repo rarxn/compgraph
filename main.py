@@ -31,43 +31,58 @@ def task2():
 def task5():
     img = Img(1000, 1000)
     mod = Model3D('model_1.obj')
-    mod.draw_vertices(img, Color([255, 255, 255]), 4000, 500)
+    mod.screen_vertices(4000, 500)
+    mod.draw_vertices(img, Color([255, 255, 255]))
     img.save_flipped('images/task_5.jpg')
 
 
 def task7():
     img = Img(1000, 1000)
     mod = Model3D('model_1.obj')
-    mod.draw_polygon(img, Color([255, 255, 255]), 4000, 500)
+    mod.screen_vertices(4000, 500)
+    mod.draw_polygon(img, Color([255, 255, 255]))
     img.save_flipped('images/task_7.jpg')
 
 
 def task10():
     img = Img(1000, 1000)
     mod = Model3D('model_1.obj')
-    mod.draw_triangle(img, 4000, 500, False)
+    mod.screen_vertices(4000, 500)
+    mod.draw_triangle(img, False)
     img.save_flipped('images/task_10.jpg')
 
 
 def task11():
     img = Img(1000, 1000)
     mod = Model3D('model_1.obj')
-    mod.draw_triangle(img, 4000, 500, True)
+    mod.screen_vertices(4000, 500)
+    mod.draw_triangle(img, True)
     img.save_flipped('images/task_11.jpg')
 
 
 def task12():
     img = Img(1000, 1000)
     mod = Model3D('model_1.obj')
-    mod.draw_triangle(img, 4000, 500, True)
+    mod.screen_vertices(4000, 500)
+
+    mod.draw_triangle(img, True)
     img.save_flipped('images/task_12.jpg')
 
 
 def task15():
     img = Img(1000, 1000)
     mod = Model3D('model_1.obj')
-    mod.draw_triangle(img, 4000, 500, True)
+    mod.screen_vertices(4000, 500)
+    mod.draw_triangle(img, True)
     img.save_flipped('images/task_15.jpg')
+
+
+def task18():
+    img = Img(1000, 1000)
+    mod = Model3D('model_1.obj')
+    mod.projective_vertices()
+    mod.draw_triangle(img, True)
+    img.save('images/task18.jpg')
 
 
 if __name__ == '__main__':
@@ -79,4 +94,5 @@ if __name__ == '__main__':
     # task11()
     # task12()
     # task15()
+    task18()
     pass
