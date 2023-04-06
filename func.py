@@ -2,6 +2,10 @@ from PIL import Image
 import numpy as np
 from tqdm import tqdm
 
+text_info = Image.open('test.jpg', 'r')
+text_width, text_height = text_info.size
+text_info = np.array(text_info)
+
 
 def create_image(h, w, color, output_file):
     data = np.zeros((h, w, 3), dtype=np.uint8)
@@ -117,6 +121,8 @@ class Model3D:
         self.polygon = []
         self.normal = []
         self.polygon_normal = []
+        self.texture = []
+        self.vt = []
         with open(file_path, 'r') as f:
             for line in f:
                 if len(line) == 1:
@@ -127,8 +133,13 @@ class Model3D:
                 elif line[0] == 'f':
                     self.polygon.append([int(idx.split('/')[0]) - 1 for idx in line[1:]])
                     self.polygon_normal.append([int(idx.split('/')[2]) - 1 for idx in line[1:]])
+                    self.texture.append([int(idx.split('/')[1]) - 1 for idx in line[1:]])
+
                 elif line[0] == 'vn':
                     self.normal.append(Point3D(float(line[1]), float(line[2]), float(line[3])))
+
+                elif line[0] == 'vt':
+                    self.vt.append([float(line[1]), float(line[2])])
 
     def draw_vertices(self, image, color):
         for vertex in self.vertices:
@@ -145,7 +156,12 @@ class Model3D:
     def draw_triangle(self, image, colored):
         # colors = 3 if colored else 1
         l = [0, 0, 1]
-        for p, n in tqdm(zip(self.polygon, self.polygon_normal)):
+        for p, n, t in tqdm(zip(self.polygon, self.polygon_normal, self.texture)):
+            u0, v0 = self.vt[t[0]]
+            u1, v1 = self.vt[t[1]]
+            u2, v2 = self.vt[t[2]]
+            u = np.array([u0, u1, u2])
+            v = np.array([v0, v1, v2])
             # color = Color(np.random.randint(1, 256, size=colors))
             x0, y0, z0 = self.vertices[p[0]].get_coordinates()
             x1, y1, z1 = self.vertices[p[1]].get_coordinates()
@@ -155,9 +171,9 @@ class Model3D:
             xmax = max(0, max(x0, x1, x2))
             ymax = max(0, max(y0, y1, y2))
             # task 18
-            vec_normal = np.array([np.dot(self.normal[idx].get_coordinates(), l) / (
-                        np.linalg.norm(self.normal[idx].get_coordinates()) * np.linalg.norm(l))
-                                   for idx in n])
+            # vec_normal = np.array([np.dot(self.normal[idx].get_coordinates(), l) / (
+            #         np.linalg.norm(self.normal[idx].get_coordinates()) * np.linalg.norm(l))
+            #                        for idx in n])
             # task12-14
             # normal = get_normal(self.vertices[p[0]].get_coordinates(), self.vertices[p[1]].get_coordinates(),
             #                     self.vertices[p[2]].get_coordinates())
@@ -171,9 +187,13 @@ class Model3D:
                         z = barycentric[0] * z0 + barycentric[1] * z1 + barycentric[2] * z2
                         if 0 <= x < image.w and 0 <= y < image.h:
                             if z > image.z_buffer[x, y]:
-                                color = Color([np.sum(255 * (vec_normal * barycentric)), 0, 0])  # task 18
+                                idx0, idx1 = np.sum(text_width * (barycentric * u)), np.sum(
+                                    text_height * (barycentric * v))
+                                color = Color(text_info[int(np.round(idx0))][int(np.round(idx1))])
+                                # color = Color([np.sum(255 * (vec_normal * barycentric)), 0, 0])  # task 18
                                 image.z_buffer[x, y] = z
                                 image.setPixel(x, y, color)
+
 
     def screen_vertices(self, k, b):
         for v in self.vertices:
@@ -187,9 +207,13 @@ class Model3D:
                       [0, 0, 1]])
         for v in self.vertices:
             if R is not None:
-                v.set_coordinates(R @ (K @ (v.get_coordinates() + t)))
+                v.set_coordinates(R @ v.get_coordinates())
+                v.set_coordinates(K @ (v.get_coordinates() + t))
             else:
                 v.set_coordinates(K @ (v.get_coordinates() + t))
+        if R is not None:
+            for v in self.normal:
+                v.set_coordinates(R @ v.get_coordinates())
 
 
 def get_barycentric_coordinates(x, y, x0, y0, x1, y1, x2, y2):

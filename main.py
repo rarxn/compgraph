@@ -85,6 +85,14 @@ def task18():
     img.save('images/task18.jpg')
 
 
+def dop():
+    img = Img(1000, 1000)
+    mod = Model3D('model_1.obj')
+    mod.projective_vertices([0, -2 * np.pi / 3, 0])
+    mod.draw_triangle(img, True)
+    img.save('images/dop.jpg')
+
+
 if __name__ == '__main__':
     # task1()
     # task2()
@@ -94,5 +102,6 @@ if __name__ == '__main__':
     # task11()
     # task12()
     # task15()
-    task18()
+    # task18()
+    dop()
     pass
