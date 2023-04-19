@@ -20,11 +20,15 @@ def create_image(h, w, color, output_file):
 
 
 class Color:
+    """Класс содержащий информацию о цвете в формате rgb"""
+
     def __init__(self, rgb=[0, 0, 0]):
         self.rgb = rgb
 
 
 class Img:
+    """класс для хранения изображения в памяти в виде массива"""
+
     def __init__(self, h=800, w=800, bg_color=Color([0, 0, 0])):
         self.h = h
         self.w = w
@@ -98,6 +102,7 @@ class Img:
                 error -= 1.0
 
     def draw_star(self, type_lines, color):
+        """Отрисовка звезды состоящей из линий"""
         for i in range(13):
             alpha = 2 * np.pi * i / 13
             type_lines(100, 100, int(np.round(100 + 95 * np.cos(alpha))), int(np.round(100 + 95 * np.sin(alpha))),
@@ -105,13 +110,17 @@ class Img:
 
 
 class Point3D:
+    """Класс точки с координатами x,y,z"""
+
     def __init__(self, x, y, z):
         self.coordinates = np.array([x, y, z])
 
     def get_coordinates(self):
+        """Геттер для получения координат"""
         return self.coordinates
 
     def set_coordinates(self, coords):
+        """Сеттер для установления новых координат"""
         self.coordinates = coords
 
 
@@ -123,6 +132,7 @@ class Model3D:
         self.polygon_normal = []
         self.texture = []
         self.vt = []
+
         with open(file_path, 'r') as f:
             for line in f:
                 if len(line) == 1:
@@ -134,19 +144,19 @@ class Model3D:
                     self.polygon.append([int(idx.split('/')[0]) - 1 for idx in line[1:]])
                     self.polygon_normal.append([int(idx.split('/')[2]) - 1 for idx in line[1:]])
                     self.texture.append([int(idx.split('/')[1]) - 1 for idx in line[1:]])
-
                 elif line[0] == 'vn':
                     self.normal.append(Point3D(float(line[1]), float(line[2]), float(line[3])))
-
                 elif line[0] == 'vt':
                     self.vt.append([float(line[1]), float(line[2])])
 
     def draw_vertices(self, image, color):
+        """Отрисовка вершин трёхмерной модели"""
         for vertex in self.vertices:
             x, y, _ = vertex.get_coordinates()
             image.setPixel(x, y, color)
 
     def draw_polygon(self, image, color):
+        """Отрисовка рёбер трёхмерной модели"""
         for p in self.polygon:
             for i in range(len(p)):
                 x1, y1, _ = np.round(self.vertices[p[i]].get_coordinates()).astype(int)
@@ -154,6 +164,7 @@ class Model3D:
                 image.line4(x1, y1, x2, y2, color)
 
     def draw_triangle(self, image, colored):
+        """Отрисовка треугольников"""
         # colors = 3 if colored else 1
         l = [0, 0, 1]
         for p, n, t in tqdm(zip(self.polygon, self.polygon_normal, self.texture)):
@@ -194,12 +205,13 @@ class Model3D:
                                 image.z_buffer[x, y] = z
                                 image.setPixel(x, y, color)
 
-
     def screen_vertices(self, k, b):
+        """Преобразование к экранным координатам"""
         for v in self.vertices:
             v.set_coordinates(k * v.get_coordinates() + b)
 
     def projective_vertices(self, rotate=None):
+        """Проективное преобразование"""
         R = rotation_matrix(*rotate) if rotate else None
         t = np.array([0.005, -0.05, 0.9])
         K = np.array([[-5000, 0, 500],
@@ -217,6 +229,11 @@ class Model3D:
 
 
 def get_barycentric_coordinates(x, y, x0, y0, x1, y1, x2, y2):
+    """
+    вычисление барицентрических координат для точки с
+    экранными (целочисленными координатами) (x,y) относительно
+    вещественных вершин треугольника (x0, y0), (x1, y1) и (x2, y2)
+    """
     lambda0 = ((x1 - x2) * (y - y2) - (y1 - y2) * (x - x2)) / \
               ((x1 - x2) * (y0 - y2) - (y1 - y2) * (x0 - x2))
     lambda1 = ((x2 - x0) * (y - y0) - (y2 - y0) * (x - x0)) / \
@@ -231,6 +248,7 @@ def get_normal(p0, p1, p2):
 
 
 def rotation_matrix(alpha, betta, gamma):
+    """Матрица для поворота модели"""
     r1 = np.array([[1, 0, 0],
                    [0, np.cos(alpha), np.sin(alpha)],
                    [0, -np.sin(alpha), np.cos(alpha)]])
